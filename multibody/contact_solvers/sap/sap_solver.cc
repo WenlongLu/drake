@@ -1,13 +1,19 @@
 #include "drake/multibody/contact_solvers/sap/sap_solver.h"
 
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
+#include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
+
 #include "drake/common/default_scalars.h"
 #include "drake/common/extract_double.h"
+#include "drake/common/fmt.h"
+#include "drake/common/fmt_eigen.h"
 #include "drake/math/linear_solve.h"
 #include "drake/multibody/contact_solvers/newton_with_bisection.h"
 #include "drake/multibody/contact_solvers/supernodal_solver.h"
@@ -236,6 +242,23 @@ SapSolverStatus SapSolver<double>::SolveWithGuess(
 
   if (!converged) return SapSolverStatus::kFailure;
 
+  const MatrixX<double> H = CalcDenseHessian(*context);
+  for (int bi = 0; bi < 3; bi++) {
+    std::cout << "body " << bi << std::endl;
+    int hi = model_->velocities_permutation().permuted_index(bi * 6);
+    std::cout << H.block(hi, hi, 6, 6).norm() << std::endl;
+    std::cout << H.block(hi, hi, 3, 3).norm() << std::endl;
+    std::cout << H.block(hi + 3, hi + 3, 3, 3).norm() << std::endl;
+
+    Eigen::EigenSolver<Eigen::MatrixXd> es(H.block(hi, hi, 6, 6));
+
+    fmt::print("The eigenvalues are: = \n{}\n",
+               fmt_eigen(es.eigenvalues().real()));
+    fmt::print("The eigenvectors are: = \n{}\n",
+               fmt_eigen(es.eigenvectors().real()));
+    std::cout << std::endl;
+  }
+
   PackSapSolverResults(*context, results);
 
   // N.B. If the stopping criteria is satisfied for k = 0, the solver is not
@@ -273,8 +296,8 @@ T SapSolver<T>::CalcCostAlongLine(
 
   if (d2ell_dalpha2 != nullptr) {
     // Since it is more efficient to calculate impulses (gamma) and their
-    // derivatives (G) together, this evaluation avoids calculating the impulses
-    // twice.
+    // derivatives (G) together, this evaluation avoids calculating the
+    // impulses twice.
     model_->EvalConstraintsHessian(context_alpha);
   }
 
@@ -286,12 +309,12 @@ T SapSolver<T>::CalcCostAlongLine(
   // Regularizer cost.
   const T ellR = 0.5 * gamma.dot(R.asDiagonal() * gamma);
 
-  // Momentum cost. We use the O(n) strategy described in [Castro et al., 2021].
-  // The momentum cost is: ellA(α) = 0.5‖v(α)−v*‖², where ‖⋅‖ is the norm
-  // defined by A. v(α) corresponds to the value of v along the search
+  // Momentum cost. We use the O(n) strategy described in [Castro et al.,
+  // 2021]. The momentum cost is: ellA(α) = 0.5‖v(α)−v*‖², where ‖⋅‖ is the
+  // norm defined by A. v(α) corresponds to the value of v along the search
   // direction: v(α) = v + αΔv. Using v(α) in the expression of the cost and
-  // expanding the squared norm leads to: ellA(α) = 0.5‖v−v*‖² + αΔvᵀ⋅A⋅(v−v*) +
-  // 0.5‖Δv‖²α². We now notice some of those terms are already cached:
+  // expanding the squared norm leads to: ellA(α) = 0.5‖v−v*‖² + αΔvᵀ⋅A⋅(v−v*)
+  // + 0.5‖Δv‖²α². We now notice some of those terms are already cached:
   //  - dpᵀ = Δvᵀ⋅A
   //  - ellA(v) = 0.5‖v−v*‖²
   //  - d2ellA_dalpha2 = 0.5‖Δv‖²α², see [Castro et al., 2021; §VIII.C].
@@ -313,7 +336,8 @@ T SapSolver<T>::CalcCostAlongLine(
   // Compute second derivative.
   if (d2ell_dalpha2 != nullptr) {
     // N.B. This evaluation should be cheap given we called
-    // EvalConstraintsHessian() at the very start of the scope of this function.
+    // EvalConstraintsHessian() at the very start of the scope of this
+    // function.
     const std::vector<MatrixX<T>>& G =
         model_->EvalConstraintsHessian(context_alpha);
 
@@ -368,11 +392,11 @@ std::pair<T, int> SapSolver<T>::PerformBackTrackingLineSearch(
   const VectorX<T>& dv = search_direction_data.dv;
   const T dell_dalpha0 = ell_grad_v0.dot(dv);
 
-  // dℓ/dα(α = 0) is guaranteed to be strictly negative given the the Hessian of
-  // the cost is positive definite. Only round-off errors in the factorization
-  // of the Hessian for ill-conditioned systems (small regularization) can
-  // destroy this property. If so, we abort given that'd mean the model must be
-  // revisited.
+  // dℓ/dα(α = 0) is guaranteed to be strictly negative given the the Hessian
+  // of the cost is positive definite. Only round-off errors in the
+  // factorization of the Hessian for ill-conditioned systems (small
+  // regularization) can destroy this property. If so, we abort given that'd
+  // mean the model must be revisited.
   if (dell_dalpha0 >= 0) {
     throw std::runtime_error(
         "The cost does not decrease along the search direction. This is "
@@ -393,12 +417,12 @@ std::pair<T, int> SapSolver<T>::PerformBackTrackingLineSearch(
   // ell_scale != 0.
   const double ell_scale = ExtractDoubleOrThrow(0.5 * (ell + ell0));
 
-  // N.B. SAP checks that the cost decreases monotonically using a slop to avoid
-  // false negatives due to round-off errors. Therefore if we are going to exit
-  // when the gradient is near zero, we want to ensure the error introduced by a
-  // gradient close to zero (though not exactly zero) is much smaller than the
-  // slop. Therefore we use a relative slop much smaller than the one used to
-  // verify monotonic convergence.
+  // N.B. SAP checks that the cost decreases monotonically using a slop to
+  // avoid false negatives due to round-off errors. Therefore if we are going
+  // to exit when the gradient is near zero, we want to ensure the error
+  // introduced by a gradient close to zero (though not exactly zero) is much
+  // smaller than the slop. Therefore we use a relative slop much smaller than
+  // the one used to verify monotonic convergence.
   const double ell_slop =
       parameters_.relative_slop / 10.0 * std::max(1.0, ell_scale);
   // N.B. We already checked that dell ≥ 0.
@@ -426,13 +450,13 @@ std::pair<T, int> SapSolver<T>::PerformBackTrackingLineSearch(
     if (abs(dell_dalpha_approx) < ell_slop)
       return std::make_pair(alpha, iteration);
 
-    // We scan discrete values of alpha from alpha_max to zero and seek for the
-    // minimum value of the cost evaluated at those discrete values. Since we
-    // know the cost is convex, we detect this minimum by checking the condition
-    // ell > ell_prev. If Armijo's criterion is satisfied, we are done.
-    // Otherwise we continue iterating until Armijo's criterion is satisfied.
-    // N.B. Armijo's criterion allows to prove convergence. Therefore we want
-    // the search parameter to satisfy it.
+    // We scan discrete values of alpha from alpha_max to zero and seek for
+    // the minimum value of the cost evaluated at those discrete values. Since
+    // we know the cost is convex, we detect this minimum by checking the
+    // condition ell > ell_prev. If Armijo's criterion is satisfied, we are
+    // done. Otherwise we continue iterating until Armijo's criterion is
+    // satisfied. N.B. Armijo's criterion allows to prove convergence.
+    // Therefore we want the search parameter to satisfy it.
     if (ell > ell_prev && satisfies_armijo(alpha, ell)) {
       // The previous iteration is better if it satisfies Armijo's
       // criterion since in this scope ell_prev < ell. If so, we
@@ -450,8 +474,10 @@ std::pair<T, int> SapSolver<T>::PerformBackTrackingLineSearch(
   // If we are here, the line-search could not find a valid parameter that
   // satisfies Armijo's criterion.
   throw std::runtime_error(
-      "Line search reached the maximum number of iterations. Either we need to "
-      "increase the maximum number of iterations parameter or to condition the "
+      "Line search reached the maximum number of iterations. Either we need "
+      "to "
+      "increase the maximum number of iterations parameter or to condition "
+      "the "
       "problem better.");
 
   // Silence "no-return value" warning from the compiler.
@@ -480,11 +506,11 @@ std::pair<double, int> SapSolver<double>::PerformExactLineSearch(
   const VectorX<double>& dv = search_direction_data.dv;
   const double dell_dalpha0 = ell_grad_v0.dot(dv);
 
-  // dℓ/dα(α = 0) is guaranteed to be strictly negative given the the Hessian of
-  // the cost is positive definite. Only round-off errors in the factorization
-  // of the Hessian for ill-conditioned systems (small regularization) can
-  // destroy this property. If so, we abort given that'd mean the model must be
-  // revisited.
+  // dℓ/dα(α = 0) is guaranteed to be strictly negative given the the Hessian
+  // of the cost is positive definite. Only round-off errors in the
+  // factorization of the Hessian for ill-conditioned systems (small
+  // regularization) can destroy this property. If so, we abort given that'd
+  // mean the model must be revisited.
   if (dell_dalpha0 >= 0) {
     throw std::runtime_error(
         "The cost does not decrease along the search direction. This is "
@@ -515,25 +541,25 @@ std::pair<double, int> SapSolver<double>::PerformExactLineSearch(
       parameters_.cost_abs_tolerance + parameters_.cost_rel_tolerance * ell0)
     return std::make_pair(1.0, 0);
 
-  // N.B. We place the data needed to evaluate cost and gradients into a single
-  // struct so that cost_and_gradient only needs to capture a single pointer.
-  // This avoids heap allocations when passing the lambda to
+  // N.B. We place the data needed to evaluate cost and gradients into a
+  // single struct so that cost_and_gradient only needs to capture a single
+  // pointer. This avoids heap allocations when passing the lambda to
   // DoNewtonWithBisectionFallback().
   struct EvalData {
     const SapSolver<double>& solver;
     const Context<double>& context0;  // Context at alpha = 0.
     const SearchDirectionData& search_direction_data;
     Context<double>& scratch;  // Context at alpha != 0.
-    // N.B. We normalize the gradient to minimize round-off errors as f(alpha) =
-    // −ℓ'(α)/dell_scale.
+    // N.B. We normalize the gradient to minimize round-off errors as f(alpha)
+    // = −ℓ'(α)/dell_scale.
     const double dell_scale;
     VectorX<double> vec_scratch;
   };
 
-  // N.B. At this point we know that dell_dalpha0 < 0. Also, if the line search
-  // was called it is because the residual (the gradient of the cost) is
-  // non-zero. Therefore we can safely divide by dell_dalpha0.
-  // N.B. We then define f(alpha) = −ℓ'(α)/ℓ'₀ so that f(alpha=0) = -1.
+  // N.B. At this point we know that dell_dalpha0 < 0. Also, if the line
+  // search was called it is because the residual (the gradient of the cost)
+  // is non-zero. Therefore we can safely divide by dell_dalpha0. N.B. We then
+  // define f(alpha) = −ℓ'(α)/ℓ'₀ so that f(alpha=0) = -1.
   const double dell_scale = -dell_dalpha0;
   EvalData data{*this, context, search_direction_data, *scratch, dell_scale};
 
@@ -552,16 +578,16 @@ std::pair<double, int> SapSolver<double>::PerformExactLineSearch(
   // alpha = 0.
   const double alpha_guess = std::min(-dell_dalpha0 / d2ell, alpha_max);
 
-  // N.B. If we are here, then we already know that dell_dalpha0 < 0 and dell >
-  // 0, and therefore [0, alpha_max] is a valid bracket.
+  // N.B. If we are here, then we already know that dell_dalpha0 < 0 and dell
+  // > 0, and therefore [0, alpha_max] is a valid bracket.
   const Bracket bracket(0., dell_dalpha0 / dell_scale, alpha_max,
                         dell / dell_scale);
 
   // This relative tolerance was obtained by experimentation on a large set of
-  // tests cases. We found out that with f_tolerance ∈ [10⁻¹⁴, 10⁻³] the solver
-  // is robust with small changes in performances (about 30%). We then choose a
-  // safe tolerance far enough from the lower limit (close to machine epsilon)
-  // and the upper limit (close to an inexact method).
+  // tests cases. We found out that with f_tolerance ∈ [10⁻¹⁴, 10⁻³] the
+  // solver is robust with small changes in performances (about 30%). We then
+  // choose a safe tolerance far enough from the lower limit (close to machine
+  // epsilon) and the upper limit (close to an inexact method).
   const double f_tolerance = 1.0e-8;  // f = −ℓ'(α)/ℓ'₀ is dimensionless.
   const double alpha_tolerance = f_tolerance * alpha_guess;
   const auto [alpha, iters] = DoNewtonWithBisectionFallback(
@@ -632,8 +658,8 @@ void SapSolver<T>::CallDenseSolver(const Context<T>& context,
   // N.B. The support for dense algebra is mostly for testing purposes, even
   // though the computation of the dense H (and in particular of the Jᵀ⋅G⋅J
   // term) is very costly. Therefore below we decided to trade off speed for
-  // stability when choosing to use an LDLT decomposition instead of a slightly
-  // faster, though less stable, LLT decomposition.
+  // stability when choosing to use an LDLT decomposition instead of a
+  // slightly faster, though less stable, LLT decomposition.
   const math::LinearSolver<Eigen::LDLT, MatrixX<T>> H_ldlt(H);
   if (H_ldlt.eigen_linear_solver().info() != Eigen::Success) {
     // TODO(amcastro-tri): Unit test this condition.
@@ -656,7 +682,8 @@ void SapSolver<T>::UpdateSuperNodalSolver(
     unused(context);
     unused(supernodal_solver);
     throw std::logic_error(
-        "SapSolver::UpdateSuperNodalSolver(): SuperNodalSolver only supports T "
+        "SapSolver::UpdateSuperNodalSolver(): SuperNodalSolver only supports "
+        "T "
         "= double.");
   }
 }
