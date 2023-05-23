@@ -16,6 +16,8 @@
 DEFINE_double(simulation_time, 0.4,
               "Desired duration of the simulation in seconds.");
 // See MultibodyPlantConfig for the valid strings of contact_model.
+DEFINE_string(discrete_solver, "tamsi",
+              "Discrete contact solver. Options are: 'tamsi', 'sap'.");
 DEFINE_string(contact_model, "hydroelastic",
               "Contact model. Options are: 'point', 'hydroelastic', "
               "'hydroelastic_with_fallback'.");
@@ -78,6 +80,7 @@ int do_main() {
   config.time_step = FLAGS_mbp_dt;
   config.penetration_allowance = 0.001;
   config.contact_model = FLAGS_contact_model;
+  config.discrete_contact_solver = FLAGS_discrete_solver;
   config.contact_surface_representation = FLAGS_contact_surface_representation;
   auto [plant, scene_graph] = AddMultibodyPlant(config, &builder);
 

@@ -9,6 +9,7 @@
 *.bak
 # - Directories (at top level)
 /xcode/
+/drake-build/
 /.cproject/
 /.project/
 /.settings/
