@@ -79,11 +79,12 @@ void AddBinActionBodies(double mass, double hydroelastic_modulus,
 
   auto pile_model_instance_index = plant->AddModelInstance("Pile");
 
-  for (int i = 1; i < 4; i++) {
-    for (int j = 1; j < 2; j++) {
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
       // Add the box. Let B be the box's frame (at its center). The box's
       // center of mass Bcm is coincident with Bo.
       double box_size[] = {0.4, 0.4, 0.4};
+      if (i == 2) box_size[2] *= (j + 1);
       const RigidBody<double>& box =
           plant->AddRigidBody(std::string("Box_") + std::to_string(i) +
                                   std::string("_") + std::to_string(j),
@@ -190,22 +191,38 @@ int do_main() {
   //   }
   // }
 
-  auto& box_1_1 = plant.GetBodyByName(std::string("Box_1_1"));
-  std::cout << "Box_1_1 with v index " << box_1_1.floating_velocities_start()
-            << std::endl;
-  auto& box_2_1 = plant.GetBodyByName(std::string("Box_2_1"));
-  std::cout << "Box_2_1 with v index " << box_2_1.floating_velocities_start()
-            << std::endl;
-  auto& box_3_1 = plant.GetBodyByName(std::string("Box_3_1"));
-  std::cout << "Box_3_1 with v index " << box_3_1.floating_velocities_start()
-            << std::endl;
+  // test group 0
+  auto& box_0_0 = plant.GetBodyByName(std::string("Box_0_0"));
+  auto& box_0_1 = plant.GetBodyByName(std::string("Box_0_1"));
+  auto& box_0_2 = plant.GetBodyByName(std::string("Box_0_2"));
+  plant.SetFreeBodyPose(&plant_context, box_0_0,
+                        math::RigidTransformd{Vector3d(-0.9, -0.6, 0.2)});
+  plant.SetFreeBodyPose(&plant_context, box_0_1,
+                        math::RigidTransformd{Vector3d(0., -0.6, 0.2)});
+  plant.SetFreeBodyPose(&plant_context, box_0_2,
+                        math::RigidTransformd{Vector3d(1.1, -0.6, 0.2)});
 
+  // test group 1
+  auto& box_1_0 = plant.GetBodyByName(std::string("Box_1_0"));
+  auto& box_1_1 = plant.GetBodyByName(std::string("Box_1_1"));
+  auto& box_1_2 = plant.GetBodyByName(std::string("Box_1_2"));
+  plant.SetFreeBodyPose(&plant_context, box_1_0,
+                        math::RigidTransformd{Vector3d(0.0, 0.0, 0.2)});
   plant.SetFreeBodyPose(&plant_context, box_1_1,
-                        math::RigidTransformd{Vector3d(1.1, 0.0, 0.2)});
+                        math::RigidTransformd{Vector3d(0.0, 0.0, 0.6)});
+  plant.SetFreeBodyPose(&plant_context, box_1_2,
+                        math::RigidTransformd{Vector3d(0.0, 0.0, 1.0)});
+
+  // test group 2
+  auto& box_2_0 = plant.GetBodyByName(std::string("Box_2_0"));
+  auto& box_2_1 = plant.GetBodyByName(std::string("Box_2_1"));
+  auto& box_2_2 = plant.GetBodyByName(std::string("Box_2_2"));
+  plant.SetFreeBodyPose(&plant_context, box_2_0,
+                        math::RigidTransformd{Vector3d(-0.6, 0.6, 0.2)});
   plant.SetFreeBodyPose(&plant_context, box_2_1,
-                        math::RigidTransformd{Vector3d(0., 0.0, 0.2)});
-  plant.SetFreeBodyPose(&plant_context, box_3_1,
-                        math::RigidTransformd{Vector3d(-0.9, 0.0, 0.2)});
+                        math::RigidTransformd{Vector3d(0.0, 0.6, 0.4)});
+  plant.SetFreeBodyPose(&plant_context, box_2_2,
+                        math::RigidTransformd{Vector3d(0.6, 0.6, 0.6)});
 
   simulator->AdvanceTo(FLAGS_simulation_time);
   systems::PrintSimulatorStatistics(*simulator);

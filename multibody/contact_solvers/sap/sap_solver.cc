@@ -243,19 +243,38 @@ SapSolverStatus SapSolver<double>::SolveWithGuess(
   if (!converged) return SapSolverStatus::kFailure;
 
   const MatrixX<double> H = CalcDenseHessian(*context);
-  for (int bi = 0; bi < 3; bi++) {
-    std::cout << "body " << bi << std::endl;
-    int hi = model_->velocities_permutation().permuted_index(bi * 6);
-    std::cout << H.block(hi, hi, 6, 6).norm() << std::endl;
-    std::cout << H.block(hi, hi, 3, 3).norm() << std::endl;
-    std::cout << H.block(hi + 3, hi + 3, 3, 3).norm() << std::endl;
+  // std::cout << H.rows() << " " << H.cols() << std::endl;
+  // std::cout << model_->velocities_permutation().domain_size() << " "
+  //           << model_->velocities_permutation().permuted_domain_size()
+  //           << std::endl;
+  for (int di = 0; di < model_->velocities_permutation().domain_size();
+       di += 6) {
+    if (!model_->velocities_permutation().participates(di)) continue;
 
-    Eigen::EigenSolver<Eigen::MatrixXd> es(H.block(hi, hi, 6, 6));
+    std::cout << "body " << di / 6 << std::endl;
+    int hi = model_->velocities_permutation().permuted_index(di);
 
+    // std::cout << "6x6:" << std::endl;
+    // Eigen::EigenSolver<Eigen::MatrixXd> es(H.block(hi, hi, 6, 6));
+    // fmt::print("The eigenvalues are: = \n{}\n",
+    //            fmt_eigen(es.eigenvalues().real()));
+    // fmt::print("The eigenvectors are: = \n{}\n",
+    //            fmt_eigen(es.eigenvectors().real()));
+
+    std::cout << "angular:" << std::endl;
+    Eigen::EigenSolver<Eigen::MatrixXd> es_linear(H.block(hi, hi, 3, 3));
     fmt::print("The eigenvalues are: = \n{}\n",
-               fmt_eigen(es.eigenvalues().real()));
+               fmt_eigen(es_linear.eigenvalues().real()));
     fmt::print("The eigenvectors are: = \n{}\n",
-               fmt_eigen(es.eigenvectors().real()));
+               fmt_eigen(es_linear.eigenvectors().real()));
+
+    std::cout << "linear:" << std::endl;
+    Eigen::EigenSolver<Eigen::MatrixXd> es_angular(
+        H.block(hi + 3, hi + 3, 3, 3));
+    fmt::print("The eigenvalues are: = \n{}\n",
+               fmt_eigen(es_angular.eigenvalues().real()));
+    fmt::print("The eigenvectors are: = \n{}\n",
+               fmt_eigen(es_angular.eigenvectors().real()));
     std::cout << std::endl;
   }
 
