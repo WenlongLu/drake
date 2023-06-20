@@ -49,12 +49,15 @@ DEFINE_double(mbp_dt, 0.001,
               "for the multibody plant modeled as a discrete system. "
               "Strictly positive.");
 
+DEFINE_double(slope_angle, 0.2, "slope roll angle in radian");
+
 namespace drake {
 namespace examples {
 namespace bin_action {
 namespace {
 
 using drake::math::RigidTransformd;
+using drake::math::RollPitchYawd;
 using drake::multibody::CoulombFriction;
 using drake::multibody::SpatialVelocity;
 using Eigen::Vector3d;
@@ -79,34 +82,26 @@ void AddBinActionBodies(double mass, double hydroelastic_modulus,
 
   auto pile_model_instance_index = plant->AddModelInstance("Pile");
 
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
-      // Add the box. Let B be the box's frame (at its center). The box's
-      // center of mass Bcm is coincident with Bo.
-      double box_size[] = {0.4, 0.4, 0.4};
-      if (i == 2) box_size[2] *= (j + 1);
-      const RigidBody<double>& box =
-          plant->AddRigidBody(std::string("Box_") + std::to_string(i) +
-                                  std::string("_") + std::to_string(j),
-                              pile_model_instance_index,
-                              SpatialInertia<double>::SolidBoxWithMass(
-                                  mass, box_size[0], box_size[1], box_size[2]));
-      // Set up mechanical properties of the box.
-      ProximityProperties box_props;
-      AddContactMaterial(dissipation, {} /* point stiffness */,
-                         surface_friction, &box_props);
-      AddCompliantHydroelasticProperties(box_size[2] * resolution_hint_factor,
-                                         hydroelastic_modulus, &box_props);
-      plant->RegisterCollisionGeometry(
-          box, RigidTransformd::Identity(),
-          Box(box_size[0], box_size[1], box_size[2]), "collision",
-          std::move(box_props));
-      const Vector4<double> orange(1.0, 0.55, 0.0, 0.2);
-      plant->RegisterVisualGeometry(box, RigidTransformd::Identity(),
-                                    Box(box_size[0], box_size[1], box_size[2]),
-                                    "visual", orange);
-    }
-  }
+  // Add the box. Let B be the box's frame (at its center). The box's
+  // center of mass Bcm is coincident with Bo.
+  double box_size[] = {0.4, 0.4, 0.4};
+  const RigidBody<double>& box =
+      plant->AddRigidBody(std::string("Box"), pile_model_instance_index,
+                          SpatialInertia<double>::SolidBoxWithMass(
+                              mass, box_size[0], box_size[1], box_size[2]));
+  // Set up mechanical properties of the box.
+  ProximityProperties box_props;
+  AddContactMaterial(dissipation, {} /* point stiffness */, surface_friction,
+                     &box_props);
+  AddCompliantHydroelasticProperties(box_size[2] * resolution_hint_factor,
+                                     hydroelastic_modulus, &box_props);
+  plant->RegisterCollisionGeometry(box, RigidTransformd::Identity(),
+                                   Box(box_size[0], box_size[1], box_size[2]),
+                                   "collision", std::move(box_props));
+  const Vector4<double> orange(1.0, 0.55, 0.0, 0.2);
+  plant->RegisterVisualGeometry(box, RigidTransformd::Identity(),
+                                Box(box_size[0], box_size[1], box_size[2]),
+                                "visual", orange);
 }
 
 void AddFloorBody(double hydroelastic_modulus, double dissipation,
@@ -133,7 +128,8 @@ void AddFloorBody(double hydroelastic_modulus, double dissipation,
                                 Box(2.0, 2.0, 0.4), "visual", orange);
 
   plant->WeldFrames(plant->world_frame(), plant->GetFrameByName("Floor"),
-                    RigidTransformd(Vector3d(0, 0, -0.2)));
+                    RigidTransformd(RollPitchYawd(FLAGS_slope_angle, 0.0, 0.0),
+                                    Vector3d(0, 0, -0.2)));
 }
 
 int do_main() {
@@ -148,9 +144,8 @@ int do_main() {
   config.discrete_contact_solver = FLAGS_discrete_solver;
   config.contact_surface_representation = FLAGS_contact_surface_representation;
   auto [plant, scene_graph] = AddMultibodyPlant(config, &builder);
-
-  // Gravity acting in the -z direction.
-  plant.mutable_gravity_field().set_gravity_vector(Vector3d{0, 0, -9.81});
+  RollPitchYawd(0.2, 0.0, 0.0),
+      plant.mutable_gravity_field().set_gravity_vector(Vector3d{0, 0, -9.81});
 
   AddFloorBody(
       FLAGS_hydroelastic_modulus, FLAGS_dissipation,
@@ -160,7 +155,7 @@ int do_main() {
                               FLAGS_friction_coefficient},
       FLAGS_resolution_hint_factor, &plant);
   // Box's parameters.
-  const double mass = 0.1;  // kg
+  const double mass = 1.0;  // kg
   AddBinActionBodies(
       mass, FLAGS_hydroelastic_modulus, FLAGS_dissipation,
       CoulombFriction<double>{// static friction (unused in discrete systems)
@@ -179,55 +174,15 @@ int do_main() {
   // Set the box's initial pose.
   systems::Context<double>& plant_context =
       plant.GetMyMutableContextFromRoot(&simulator->get_mutable_context());
-  // for (int i = 0; i < 5; i++) {
-  //   for (int j = 0; j < 5; j++) {
-  //     plant.SetFreeBodyPose(
-  //         &plant_context,
-  //         plant.GetBodyByName(std::string("Ball_") + std::to_string(i) +
-  //                             std::string("_") + std::to_string(j)),
-  //         math::RigidTransformd{Vector3d(
-  //             -1.0 + 0.2 + 0.4 * static_cast<double>(1),
-  //             -1.0 + 0.2 + 0.4 * static_cast<double>(j), 0.3 + 3 - i)});
-  //   }
-  // }
 
-  // test group 0
-  auto& box_0_0 = plant.GetBodyByName(std::string("Box_0_0"));
-  auto& box_0_1 = plant.GetBodyByName(std::string("Box_0_1"));
-  auto& box_0_2 = plant.GetBodyByName(std::string("Box_0_2"));
-  plant.SetFreeBodyPose(&plant_context, box_0_0,
-                        math::RigidTransformd{Vector3d(-0.9, -0.6, 0.2)});
-  plant.SetFreeBodyPose(&plant_context, box_0_1,
-                        math::RigidTransformd{Vector3d(0., -0.6, 0.2)});
-  plant.SetFreeBodyPose(&plant_context, box_0_2,
-                        math::RigidTransformd{Vector3d(1.1, -0.6, 0.2)});
-
-  // test group 1
-  auto& box_1_0 = plant.GetBodyByName(std::string("Box_1_0"));
-  auto& box_1_1 = plant.GetBodyByName(std::string("Box_1_1"));
-  auto& box_1_2 = plant.GetBodyByName(std::string("Box_1_2"));
-  plant.SetFreeBodyPose(&plant_context, box_1_0,
-                        math::RigidTransformd{Vector3d(0.0, 0.0, 0.2)});
-  plant.SetFreeBodyPose(&plant_context, box_1_1,
-                        math::RigidTransformd{Vector3d(0.0, 0.0, 0.6)});
-  plant.SetFreeBodyPose(&plant_context, box_1_2,
-                        math::RigidTransformd{Vector3d(0.0, 0.0, 1.0)});
-
-  // test group 2
-  auto& box_2_0 = plant.GetBodyByName(std::string("Box_2_0"));
-  auto& box_2_1 = plant.GetBodyByName(std::string("Box_2_1"));
-  auto& box_2_2 = plant.GetBodyByName(std::string("Box_2_2"));
-  plant.SetFreeBodyPose(&plant_context, box_2_0,
-                        math::RigidTransformd{Vector3d(-0.6, 0.6, 0.2)});
-  plant.SetFreeBodyPose(&plant_context, box_2_1,
-                        math::RigidTransformd{Vector3d(0.0, 0.6, 0.4)});
-  plant.SetFreeBodyPose(&plant_context, box_2_2,
-                        math::RigidTransformd{Vector3d(0.6, 0.6, 0.6)});
+  auto& box = plant.GetBodyByName(std::string("Box"));
+  plant.SetFreeBodyPose(
+      &plant_context, box,
+      math::RigidTransformd{RollPitchYawd(FLAGS_slope_angle, 0.0, 0.0),
+                            Vector3d(0.0, 0.0, 0.2)});
 
   simulator->AdvanceTo(FLAGS_simulation_time);
   systems::PrintSimulatorStatistics(*simulator);
-  std::cout << "Simulator realtime rate: "
-            << simulator->get_actual_realtime_rate() << std::endl;
   return 0;
 }
 

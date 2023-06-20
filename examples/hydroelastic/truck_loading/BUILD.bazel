@@ -1,0 +1,26 @@
+package(default_visibility = ["//visibility:private"])
+
+load(
+    "@drake//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+)
+
+drake_cc_binary(
+    name = "run_dynamics",
+    srcs = ["run_dynamics.cc"],
+    deps = [
+        "//common:add_text_logging_gflags",
+        "//systems/analysis:simulator",
+        "//systems/analysis:simulator_gflags",
+        "//systems/analysis:simulator_print_stats",
+        "//systems/framework:diagram",
+        "//visualization:visualization_config_functions",
+        "//common:default_scalars",
+        "//geometry:geometry_ids",
+        "//geometry:scene_graph",
+        "//math:geometric_transform",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "@gflags",
+    ],
+)
