@@ -5,6 +5,15 @@ load(
     "drake_cc_binary",
 )
 
+filegroup(
+    name = "models",
+    srcs = [
+        ":bin_state_test.json",
+        ":truck.sdf",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 drake_cc_binary(
     name = "run_dynamics",
     srcs = ["run_dynamics.cc"],
@@ -22,5 +31,9 @@ drake_cc_binary(
         "//multibody/parsing",
         "//multibody/plant",
         "@gflags",
+        "@com_github_nlohmann_json//:json",
     ],
+    data = [
+        ":models",
+    ]
 )

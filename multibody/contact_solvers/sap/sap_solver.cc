@@ -1,6 +1,7 @@
 #include "drake/multibody/contact_solvers/sap/sap_solver.h"
 
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <type_traits>
@@ -247,11 +248,11 @@ SapSolverStatus SapSolver<double>::SolveWithGuess(
   // std::cout << model_->velocities_permutation().domain_size() << " "
   //           << model_->velocities_permutation().permuted_domain_size()
   //           << std::endl;
+  // std::ofstream color_map("color_map.csv");
   for (int di = 0; di < model_->velocities_permutation().domain_size();
        di += 6) {
     if (!model_->velocities_permutation().participates(di)) continue;
 
-    std::cout << "body " << di / 6 << std::endl;
     int hi = model_->velocities_permutation().permuted_index(di);
 
     // std::cout << "6x6:" << std::endl;
@@ -261,22 +262,35 @@ SapSolverStatus SapSolver<double>::SolveWithGuess(
     // fmt::print("The eigenvectors are: = \n{}\n",
     //            fmt_eigen(es.eigenvectors().real()));
 
-    std::cout << "angular:" << std::endl;
-    Eigen::EigenSolver<Eigen::MatrixXd> es_linear(H.block(hi, hi, 3, 3));
-    fmt::print("The eigenvalues are: = \n{}\n",
-               fmt_eigen(es_linear.eigenvalues().real()));
-    fmt::print("The eigenvectors are: = \n{}\n",
-               fmt_eigen(es_linear.eigenvectors().real()));
+    if (false) {
+      std::cout << "body " << di / 6 << std::endl;
+      std::cout << "angular:" << std::endl;
+      Eigen::EigenSolver<Eigen::MatrixXd> es_angular(H.block(hi, hi, 3, 3));
+      fmt::print("The eigenvalues are: = \n{}\n",
+                 fmt_eigen(es_angular.eigenvalues().real()));
+      fmt::print("The eigenvectors are: = \n{}\n",
+                 fmt_eigen(es_angular.eigenvectors().real()));
 
-    std::cout << "linear:" << std::endl;
-    Eigen::EigenSolver<Eigen::MatrixXd> es_angular(
-        H.block(hi + 3, hi + 3, 3, 3));
-    fmt::print("The eigenvalues are: = \n{}\n",
-               fmt_eigen(es_angular.eigenvalues().real()));
-    fmt::print("The eigenvectors are: = \n{}\n",
-               fmt_eigen(es_angular.eigenvectors().real()));
-    std::cout << std::endl;
+      std::cout << "linear:" << std::endl;
+      Eigen::EigenSolver<Eigen::MatrixXd> es_linear(
+          H.block(hi + 3, hi + 3, 3, 3));
+      fmt::print("The eigenvalues are: = \n{}\n",
+                 fmt_eigen(es_linear.eigenvalues().real()));
+      fmt::print("The eigenvectors are: = \n{}\n",
+                 fmt_eigen(es_linear.eigenvectors().real()));
+      std::cout << std::endl;
+    } else {
+      Eigen::EigenSolver<Eigen::MatrixXd> es_angular(H.block(hi, hi, 3, 3));
+      // color_map << es_angular.eigenvalues().real().minCoeff() << ",";
+      Eigen::EigenSolver<Eigen::MatrixXd> es_linear(
+          H.block(hi + 3, hi + 3, 3, 3));
+      // color_map << es_linear.eigenvalues().real().minCoeff() << std::endl;
+      std::cout << di / 6 << "," << es_angular.eigenvalues().real().minCoeff()
+                << "," << es_linear.eigenvalues().real().minCoeff()
+                << std::endl;
+    }
   }
+  // color_map.close();
 
   PackSapSolverResults(*context, results);
 
